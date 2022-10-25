@@ -3,12 +3,12 @@ Begin VB.Form InterfaceWindow
    ClientHeight    =   5100
    ClientLeft      =   45
    ClientTop       =   390
-   ClientWidth     =   2550
+   ClientWidth     =   6180
    Icon            =   "Interface.frx":0000
    KeyPreview      =   -1  'True
    ScaleHeight     =   21.25
    ScaleMode       =   4  'Character
-   ScaleWidth      =   21.25
+   ScaleWidth      =   51.5
    StartUpPosition =   2  'CenterScreen
    Begin VB.TextBox ResultsBox 
       BeginProperty Font 
@@ -28,7 +28,7 @@ Begin VB.Form InterfaceWindow
       TabIndex        =   3
       ToolTipText     =   "Displays information regarding the specified GUIDs after a search."
       Top             =   3000
-      Width           =   2292
+      Width           =   5895
    End
    Begin VB.CommandButton SearchButton 
       Caption         =   "&Search"
@@ -42,7 +42,7 @@ Begin VB.Form InterfaceWindow
          Strikethrough   =   0   'False
       EndProperty
       Height          =   372
-      Left            =   1440
+      Left            =   5040
       TabIndex        =   2
       Top             =   2520
       Width           =   972
@@ -64,7 +64,7 @@ Begin VB.Form InterfaceWindow
       TabIndex        =   0
       ToolTipText     =   "Enter the GUID's to search for here. Each GUID should be on its own line."
       Top             =   480
-      Width           =   2292
+      Width           =   5895
    End
    Begin VB.Label ResultsLabel 
       Caption         =   "Results:"

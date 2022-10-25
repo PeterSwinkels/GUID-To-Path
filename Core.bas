@@ -27,19 +27,18 @@ Private Const MAX_SHORT_STRING As Long = &HFF&           'The maximum length in 
 
 
 'This procedure manages the access mode used.
-Private Function AccessMode(Optional Is64Bit As Variant) As Long
+Private Function AccessMode(Optional NewIs64Bit As Variant) As Long
 On Error GoTo ErrorTrap
+Dim Mode As Long
 Static CurrentIs64Bit As Boolean
 
-   If Not IsMissing(Is64Bit) Then CurrentIs64Bit = CBool(Is64Bit)
+   If Not IsMissing(NewIs64Bit) Then CurrentIs64Bit = CBool(NewIs64Bit)
 
-   If CurrentIs64Bit Then
-      AccessMode = KEY_READ Or KEY_WOW64_64KEY
-      Exit Function
-   End If
+   Mode = KEY_READ
+   If CurrentIs64Bit Then Mode = Mode Or KEY_WOW64_64KEY
 
 EndRoutine:
-   AccessMode = KEY_READ
+   AccessMode = Mode
    Exit Function
    
 ErrorTrap:
@@ -83,8 +82,9 @@ Dim Paths As String
 Dim Result As String
 Dim ReturnValue As Long
 
-   AccessMode Is64Bit:=False
+   AccessMode NewIs64Bit:=False
    GUID = UCase$(Trim$(GUID))
+   Result = vbNullString
    If Not GUID = vbNullString Then
       Do While DoEvents() > 0
          If Not Left$(GUID, 1) = "{" Then GUID = "{" & GUID
@@ -98,9 +98,9 @@ Dim ReturnValue As Long
                ReturnValue = RegOpenKeyExA(KeyH, GUID, CLng(0), AccessMode(), GUIDKeyH)
          
                If ReturnValue = ERROR_SUCCESS Then
-                  Result = GUID & " (" & GUIDTypes(GUIDType) & ")" & vbCrLf
+                  Result = Result & GUID & " (" & GUIDTypes(GUIDType) & ")" & vbCrLf
                   Found = True
-                  Paths = GetPathsFromGUID(GUIDKeyH)
+                  Paths = GetPathsFromGUID(GUIDKeyH, GUID)
                   If Paths = vbNullString Then Result = Result & "No paths." & vbCrLf Else Result = Result & Paths
                   RegCloseKey GUIDKeyH
                ElseIf Not ReturnValue = ERROR_FILE_NOT_FOUND Then
@@ -110,7 +110,6 @@ Dim ReturnValue As Long
                RegCloseKey KeyH
             End If
          Next GUIDType
-      
          
          If Found Then
             Exit Do
@@ -121,7 +120,7 @@ Dim ReturnValue As Long
                Exit Do
             Else
                Result = Result & "[Attempting 64 bit mode.]" & vbCrLf
-               AccessMode Is64Bit:=True
+               AccessMode NewIs64Bit:=True
             End If
          End If
       Loop
@@ -174,11 +173,8 @@ ErrorTrap:
    Resume EndRoutine
 End Function
 
-
-
-
 'This procedure retrieves the paths referred to by the specified GUID.
-Private Function GetPathsFromGUID(GUIDKeyH As Long) As String
+Private Function GetPathsFromGUID(GUIDKeyH As Long, GUID As String) As String
 On Error GoTo ErrorTrap
 Dim Key As Variant
 Dim KeyH As Long
@@ -191,14 +187,16 @@ Dim SubKeyH As Long
 Dim SubKeys() As String
 Dim Value As String
 
-   For Each KeyName In Array("InprocServer", "InprocServer32", "LocalServer", "LocalServer32")
+   For Each KeyName In Array("InprocHandler", "InprocHandler32", "InprocServer", "InprocServer32", "LocalServer", "LocalServer32")
       Value = GetRegistryValue(GUIDKeyH, CStr(KeyName), vbNullString)
       If Not Value = vbNullString Then Result = Result & KeyName & " = """ & Value & """" & vbCrLf
    Next KeyName
    
    For Each KeyName In Array("ProxyStubClsid", "ProxyStubClsid32")
-      Value = GetRegistryValue(GUIDKeyH, CStr(KeyName), vbNullString)
-      If Not Value = vbNullString Then Result = Result & KeyName & " = " & FindGUID(Value)
+      Value = UCase$(Trim$(GetRegistryValue(GUIDKeyH, CStr(KeyName), vbNullString)))
+      If Not Value = vbNullString Then
+         If Not Value = GUID Then Result = Result & KeyName & " = " & FindGUID(Value)
+      End If
    Next KeyName
    
    Keys = GetKeys(GUIDKeyH)
@@ -277,9 +275,16 @@ Dim ErrorCode As Long
    ErrorCode = Err.Number
    Err.Clear
    
-   On Error Resume Next
+   On Error GoTo ErrorTrap
    Description = Description & vbCr & "Error code: " & CStr(ErrorCode)
    MsgBox Description, vbExclamation
+Exit Sub
+
+EndProgram:
+   End
+   
+ErrorTrap:
+   Resume EndProgram
 End Sub
 
 
