@@ -99,6 +99,8 @@ Dim ReturnValue As Long
          
                If ReturnValue = ERROR_SUCCESS Then
                   Result = Result & GUID & " (" & GUIDTypes(GUIDType) & ")" & vbCrLf
+                  Result = Result & "Default = """ & GetRegistryValue(KeyH, GUID, vbNullString) & """" & vbCrLf
+
                   Found = True
                   Paths = GetPathsFromGUID(GUIDKeyH, GUID)
                   If Paths = vbNullString Then Result = Result & "No paths." & vbCrLf Else Result = Result & Paths
