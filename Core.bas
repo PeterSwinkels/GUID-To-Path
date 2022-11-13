@@ -3,16 +3,16 @@ Attribute VB_Name = "CoreModule"
 Option Explicit
 
 'The Microsoft Windows API constants and functions used by this program.
-Private Const ERROR_FILE_NOT_FOUND As Long = 2
+Private Const ERROR_FILE_NOT_FOUND As Long = 2&
 Private Const ERROR_NO_MORE_ITEMS As Long = 259&
-Private Const ERROR_SUCCESS As Long = 0
+Private Const ERROR_SUCCESS As Long = 0&
 Private Const FORMAT_MESSAGE_FROM_SYSTEM As Long = &H1000&
 Private Const FORMAT_MESSAGE_IGNORE_INSERTS As Long = &H200&
 Private Const HKEY_CLASSES_ROOT As Long = &H80000000
 Private Const KEY_READ As Long = &H20019
 Private Const KEY_WOW64_64KEY As Long = &H100&
 Private Const MAX_REG_VALUE_DATA As Long = &HFFFFF
-Private Const REG_SZ As Long = 1
+Private Const REG_SZ As Long = &H1&
 
 Private Declare Function FormatMessageA Lib "Kernel32.dll" (ByVal dwFlags As Long, lpSource As Long, ByVal dwMessageId As Long, ByVal dwLanguageId As Long, ByVal lpBuffer As String, ByVal nSize As Long, Arguments As Long) As Long
 Private Declare Function RegCloseKey Lib "Advapi32.dll" (ByVal hKey As Long) As Long
@@ -22,8 +22,8 @@ Private Declare Function RegQueryValueExA Lib "Advapi32.dll" (ByVal hKey As Long
 Private Declare Function SafeArrayGetDim Lib "Oleaut32.dll" (ByRef saArray() As Any) As Long
 
 'The constants used by this program.
-Private Const MAX_LONG_STRING As Long = &HFFFF&          'The maximum length in bytes allowed for a long string.
-Private Const MAX_SHORT_STRING As Long = &HFF&           'The maximum length in bytes allowed for a short string.
+Private Const MAX_LONG_STRING As Long = &HFFFF&   'Defines the maximum length in bytes allowed for a long string.
+Private Const MAX_SHORT_STRING As Long = &HFF&    'Defines the maximum length in bytes allowed for a short string.
 
 
 'This procedure manages the access mode used.
@@ -46,6 +46,29 @@ ErrorTrap:
    Resume EndRoutine
 End Function
 
+
+'This procedure checks the HKEY_CLASSES_ROOT key for the specified GUID of the specified type and returns the result.
+Private Function CheckHKEYCLASSESROOT(GUID As String, GUIDType As String, ByRef Found As Boolean) As String
+On Error GoTo ErrorTrap
+Dim KeyH As Long
+Dim Result As String
+Dim ReturnValue As Long
+
+   ReturnValue = RegOpenKeyExA(HKEY_CLASSES_ROOT, GUIDType, CLng(0), AccessMode(), KeyH)
+   
+   If ReturnValue = ERROR_SUCCESS Then
+      Result = Result & GetGUIDProperties(KeyH, GUID, GUIDType, Found)
+      RegCloseKey KeyH
+   End If
+   
+EndRoutine:
+   CheckHKEYCLASSESROOT = Result
+   Exit Function
+   
+ErrorTrap:
+   HandleError
+   Resume EndRoutine
+End Function
 
 'This procedure returns the description for the specified error code.
 Private Function ErrorDescription(ErrorCode As Long) As String
@@ -74,43 +97,20 @@ End Function
 Public Function FindGUID(GUID As String) As String
 On Error GoTo ErrorTrap
 Dim Found As Boolean
-Dim GUIDKeyH As Long
 Dim GUIDType As Long
 Dim GUIDTypes() As Variant
 Dim KeyH As Long
-Dim Paths As String
 Dim Result As String
 Dim ReturnValue As Long
 
    AccessMode NewIs64Bit:=False
-   GUID = UCase$(Trim$(GUID))
    Result = vbNullString
    If Not GUID = vbNullString Then
       Do While DoEvents() > 0
-         If Not Left$(GUID, 1) = "{" Then GUID = "{" & GUID
-         If Not Right$(GUID, 1) = "}" Then GUID = GUID & "}"
-         
          Found = False
          GUIDTypes = Array("AppID", "CLSID", "Interface", "TypeLib")
          For GUIDType = LBound(GUIDTypes()) To UBound(GUIDTypes())
-            ReturnValue = RegOpenKeyExA(HKEY_CLASSES_ROOT, GUIDTypes(GUIDType), CLng(0), AccessMode(), KeyH)
-            If ReturnValue = ERROR_SUCCESS Then
-               ReturnValue = RegOpenKeyExA(KeyH, GUID, CLng(0), AccessMode(), GUIDKeyH)
-         
-               If ReturnValue = ERROR_SUCCESS Then
-                  Result = Result & GUID & " (" & GUIDTypes(GUIDType) & ")" & vbCrLf
-                  Result = Result & "Default = """ & GetRegistryValue(KeyH, GUID, vbNullString) & """" & vbCrLf
-
-                  Found = True
-                  Paths = GetPathsFromGUID(GUIDKeyH, GUID)
-                  If Paths = vbNullString Then Result = Result & "No paths." & vbCrLf Else Result = Result & Paths
-                  RegCloseKey GUIDKeyH
-               ElseIf Not ReturnValue = ERROR_FILE_NOT_FOUND Then
-                  Result = Result & "Error code: " & CStr(ReturnValue) & " - """ & ErrorDescription(ReturnValue) & """" & vbCrLf
-               End If
-               
-               RegCloseKey KeyH
-            End If
+            Result = Result & CheckHKEYCLASSESROOT(GUID, CStr(GUIDTypes(GUIDType)), Found)
          Next GUIDType
          
          If Found Then
@@ -138,6 +138,60 @@ ErrorTrap:
    HandleError
    Resume EndRoutine
 End Function
+
+'This procedure formats the specified GUID and returns the result.
+Public Function FormatGUID(GUID As String)
+Dim FormattedGUID As String
+
+   FormattedGUID = UCase$(Trim$(GUID))
+   
+   If Not FormattedGUID = vbNullString Then
+      If Not Left$(FormattedGUID, 1) = "{" Then FormattedGUID = "{" & FormattedGUID
+      If Not Right$(FormattedGUID, 1) = "}" Then FormattedGUID = FormattedGUID & "}"
+   End If
+   
+EndRoutine:
+   FormatGUID = FormattedGUID
+   Exit Function
+   
+ErrorTrap:
+   HandleError
+   Resume EndRoutine
+End Function
+'This procedure returns the properties for the specified GUID of the specified type.
+Private Function GetGUIDProperties(KeyH As Long, GUID As String, GUIDType As String, ByRef Found As Boolean) As String
+On Error GoTo ErrorTrap
+Dim GUIDKeyH As Long
+Dim Paths As String
+Dim Result As String
+Dim ReturnValue As Long
+
+   ReturnValue = RegOpenKeyExA(KeyH, GUID, CLng(0), AccessMode(), GUIDKeyH)
+
+   If ReturnValue = ERROR_SUCCESS Then
+      Result = Result & GUID & " (" & GUIDType & ")" & vbCrLf
+      Result = Result & "Default = """ & GetRegistryValue(KeyH, GUID, vbNullString) & """" & vbCrLf
+
+      Found = True
+      Paths = GetPathsFromGUID(GUIDKeyH, GUID)
+      If Paths = vbNullString Then Result = Result & "No paths." & vbCrLf Else Result = Result & Paths
+      
+      RegCloseKey GUIDKeyH
+   ElseIf Not ReturnValue = ERROR_FILE_NOT_FOUND Then
+      Result = Result & "Error code: " & CStr(ReturnValue) & " - """ & ErrorDescription(ReturnValue) & """" & vbCrLf
+   End If
+
+EndRoutine:
+   GetGUIDProperties = Result
+   Exit Function
+   
+ErrorTrap:
+   HandleError
+   Resume EndRoutine
+End Function
+
+
+
 'This procedure returns the registry keys contained by the specified key.
 Private Function GetKeys(ParentKeyH As Long) As String()
 On Error GoTo ErrorTrap

@@ -147,7 +147,7 @@ Dim GUID As Variant
    With ResultsBox
       .Text = vbNullString
       For Each GUID In Split(GUIDListBox.Text, vbCrLf)
-         .Text = .Text & FindGUID(CStr(GUID))
+         .Text = .Text & FindGUID(FormatGUID(CStr(GUID)))
          DoEvents
       Next GUID
    End With
