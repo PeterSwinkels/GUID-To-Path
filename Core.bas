@@ -26,7 +26,7 @@ Private Const MAX_LONG_STRING As Long = &HFFFF&   'Defines the maximum length in
 Private Const MAX_SHORT_STRING As Long = &HFF&    'Defines the maximum length in bytes allowed for a short string.
 
 
-'This procedure manages the access mode used.
+'This procedure manages/returns the registry key access mode used.
 Private Function AccessMode(Optional NewIs64Bit As Variant) As Long
 On Error GoTo ErrorTrap
 Dim Mode As Long
@@ -48,7 +48,7 @@ End Function
 
 
 'This procedure checks the HKEY_CLASSES_ROOT key for the specified GUID of the specified type and returns the result.
-Private Function CheckHKEYCLASSESROOT(GUID As String, GUIDType As String, ByRef Found As Boolean) As String
+Private Function CheckHKEYCLASSESROOT(GUID As String, GUIDType As String, HiveKeyName As String) As String
 On Error GoTo ErrorTrap
 Dim KeyH As Long
 Dim Result As String
@@ -57,7 +57,7 @@ Dim ReturnValue As Long
    ReturnValue = RegOpenKeyExA(HKEY_CLASSES_ROOT, GUIDType, CLng(0), AccessMode(), KeyH)
    
    If ReturnValue = ERROR_SUCCESS Then
-      Result = Result & GetGUIDProperties(KeyH, GUID, GUIDType, Found)
+      Result = Result & GetGUIDProperties(KeyH, GUID, GUIDType, HiveKeyName)
       RegCloseKey KeyH
    End If
    
@@ -96,36 +96,27 @@ End Function
 'This procedure searches for the specified GUID and gives the command to retrieve any paths found.
 Public Function FindGUID(GUID As String) As String
 On Error GoTo ErrorTrap
-Dim Found As Boolean
+Dim BitModeFlag As Long
+Dim BitModeFlags() As Variant
 Dim GUIDType As Long
 Dim GUIDTypes() As Variant
 Dim KeyH As Long
 Dim Result As String
 Dim ReturnValue As Long
 
-   AccessMode NewIs64Bit:=False
+   BitModeFlags = Array(False, True)
+   GUIDTypes = Array("AppID", "CLSID", "Interface", "TypeLib")
    Result = vbNullString
    If Not GUID = vbNullString Then
-      Do While DoEvents() > 0
-         Found = False
-         GUIDTypes = Array("AppID", "CLSID", "Interface", "TypeLib")
-         For GUIDType = LBound(GUIDTypes()) To UBound(GUIDTypes())
-            Result = Result & CheckHKEYCLASSESROOT(GUID, CStr(GUIDTypes(GUIDType)), Found)
-         Next GUIDType
+      For BitModeFlag = LBound(BitModeFlags()) To UBound(BitModeFlags())
+         AccessMode NewIs64Bit:=CBool(BitModeFlags(BitModeFlag))
          
-         If Found Then
-            Exit Do
-         Else
-            If AccessMode() = (KEY_READ Or KEY_WOW64_64KEY) Then
-               Result = Result & GUID & " (?)" & vbCrLf
-               Result = Result & "GUID not found." & vbCrLf
-               Exit Do
-            Else
-               Result = Result & "[Attempting 64 bit mode.]" & vbCrLf
-               AccessMode NewIs64Bit:=True
-            End If
-         End If
-      Loop
+         For GUIDType = LBound(GUIDTypes()) To UBound(GUIDTypes())
+            Result = Result & CheckHKEYCLASSESROOT(GUID, CStr(GUIDTypes(GUIDType)), "HKCR")
+         Next GUIDType
+      Next BitModeFlag
+      
+      If Result = vbNullString Then Result = GUID & " - not found." & vbCrLf
       
       Result = Result & vbCrLf
    End If
@@ -159,7 +150,7 @@ ErrorTrap:
    Resume EndRoutine
 End Function
 'This procedure returns the properties for the specified GUID of the specified type.
-Private Function GetGUIDProperties(KeyH As Long, GUID As String, GUIDType As String, ByRef Found As Boolean) As String
+Private Function GetGUIDProperties(KeyH As Long, GUID As String, GUIDType As String, HiveKeyName As String) As String
 On Error GoTo ErrorTrap
 Dim GUIDKeyH As Long
 Dim Paths As String
@@ -167,20 +158,28 @@ Dim Result As String
 Dim ReturnValue As Long
 
    ReturnValue = RegOpenKeyExA(KeyH, GUID, CLng(0), AccessMode(), GUIDKeyH)
-
+     
    If ReturnValue = ERROR_SUCCESS Then
-      Result = Result & GUID & " (" & GUIDType & ")" & vbCrLf
-      Result = Result & "Default = """ & GetRegistryValue(KeyH, GUID, vbNullString) & """" & vbCrLf
+      Result = Result & GUID & " (" & HiveKeyName & ") (" & GUIDType & ") "
+      
+      If Is64BitAccess(AccessMode()) Then
+         Result = Result & "(64 bit)"
+      Else
+         Result = Result & "(32 bit)"
+      End If
 
-      Found = True
+      Result = Result & vbCrLf & "Default = """ & GetRegistryValue(KeyH, GUID, vbNullString) & """" & vbCrLf
+
       Paths = GetPathsFromGUID(GUIDKeyH, GUID)
       If Paths = vbNullString Then Result = Result & "No paths." & vbCrLf Else Result = Result & Paths
+      
+      Result = Result & vbCrLf
       
       RegCloseKey GUIDKeyH
    ElseIf Not ReturnValue = ERROR_FILE_NOT_FOUND Then
       Result = Result & "Error code: " & CStr(ReturnValue) & " - """ & ErrorDescription(ReturnValue) & """" & vbCrLf
    End If
-
+   
 EndRoutine:
    GetGUIDProperties = Result
    Exit Function
@@ -343,6 +342,22 @@ ErrorTrap:
    Resume EndProgram
 End Sub
 
+
+'This procedure checks whether the specified mode indicates 64 bit access and returns the result.
+Private Function Is64BitAccess(Mode As Long) As Boolean
+On Error GoTo ErrorTrap
+Dim Is64Bit As Boolean
+
+   Is64Bit = ((Mode And KEY_WOW64_64KEY) = KEY_WOW64_64KEY)
+
+EndRoutine:
+   Is64BitAccess = Is64Bit
+   Exit Function
+   
+ErrorTrap:
+   HandleError
+   Resume EndRoutine
+End Function
 
 'This procedure checks whether the specified value is a version number.
 Private Function IsVersion(Value As String) As Boolean
