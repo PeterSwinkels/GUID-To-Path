@@ -9,6 +9,7 @@ Private Const ERROR_SUCCESS As Long = 0&
 Private Const FORMAT_MESSAGE_FROM_SYSTEM As Long = &H1000&
 Private Const FORMAT_MESSAGE_IGNORE_INSERTS As Long = &H200&
 Private Const HKEY_CLASSES_ROOT As Long = &H80000000
+Private Const HKEY_CURRENT_USER As Long = &H80000001
 Private Const KEY_READ As Long = &H20019
 Private Const KEY_WOW64_64KEY As Long = &H100&
 Private Const MAX_REG_VALUE_DATA As Long = &HFFFFF
@@ -24,7 +25,6 @@ Private Declare Function SafeArrayGetDim Lib "Oleaut32.dll" (ByRef saArray() As 
 'The constants used by this program.
 Private Const MAX_LONG_STRING As Long = &HFFFF&   'Defines the maximum length in bytes allowed for a long string.
 Private Const MAX_SHORT_STRING As Long = &HFF&    'Defines the maximum length in bytes allowed for a short string.
-
 
 'This procedure manages/returns the registry key access mode used.
 Private Function AccessMode(Optional NewIs64Bit As Variant) As Long
@@ -45,7 +45,6 @@ ErrorTrap:
    HandleError
    Resume EndRoutine
 End Function
-
 
 'This procedure checks the HKEY_CLASSES_ROOT key for the specified GUID of the specified type and returns the result.
 Private Function CheckHKEYCLASSESROOT(GUID As String, GUIDType As String, HiveKeyName As String) As String
@@ -70,6 +69,38 @@ ErrorTrap:
    Resume EndRoutine
 End Function
 
+'This procedure checks the HKEY_CURRENT_USER\SOFTWARE\Classes key for the specified GUID of the specified type and returns the result.
+Private Function CheckHKEYCURRENTUSER(GUID As String, GUIDType As String, HiveKeyName As String) As String
+On Error GoTo ErrorTrap
+Dim ClassesKeyH As Long
+Dim GUIDTypeKeyH As Long
+Dim Result As String
+Dim ReturnValue As Long
+Dim SoftwareKeyH As Long
+
+   ReturnValue = RegOpenKeyExA(HKEY_CURRENT_USER, "SOFTWARE", CLng(0), AccessMode(), SoftwareKeyH)
+   If ReturnValue = ERROR_SUCCESS Then
+      ReturnValue = RegOpenKeyExA(SoftwareKeyH, "Classes", CLng(0), AccessMode(), ClassesKeyH)
+      If ReturnValue = ERROR_SUCCESS Then
+         ReturnValue = RegOpenKeyExA(ClassesKeyH, GUIDType, CLng(0), AccessMode(), GUIDTypeKeyH)
+         If ReturnValue = ERROR_SUCCESS Then
+            Result = Result & GetGUIDProperties(GUIDTypeKeyH, GUID, GUIDType, HiveKeyName)
+            RegCloseKey GUIDTypeKeyH
+         End If
+         RegCloseKey ClassesKeyH
+      End If
+      RegCloseKey SoftwareKeyH
+   End If
+   
+EndRoutine:
+   CheckHKEYCURRENTUSER = Result
+   Exit Function
+   
+ErrorTrap:
+   HandleError
+   Resume EndRoutine
+End Function
+
 'This procedure returns the description for the specified error code.
 Private Function ErrorDescription(ErrorCode As Long) As String
 On Error GoTo ErrorTrap
@@ -80,7 +111,7 @@ Dim Length As Long
    Length = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM Or FORMAT_MESSAGE_IGNORE_INSERTS, CLng(0), ErrorCode, CLng(0), Description, Len(Description), CLng(0))
    If Length = 0 Then
       Description = "No description."
-   ElseIf Length > 0 Then
+   Else
       Description = Left$(Description, Length - 1)
    End If
    
@@ -100,20 +131,30 @@ Dim BitModeFlag As Long
 Dim BitModeFlags() As Variant
 Dim GUIDType As Long
 Dim GUIDTypes() As Variant
+Dim HiveKey As Long
+Dim HiveKeys() As Variant
 Dim KeyH As Long
 Dim Result As String
 Dim ReturnValue As Long
 
    BitModeFlags = Array(False, True)
-   GUIDTypes = Array("AppID", "CLSID", "Interface", "TypeLib")
+   GUIDTypes = Array("AppID", "CLSID", "Component Categories", "Interface", "TypeLib")
+   HiveKeys = Array("HKCR", "HKCU")
    Result = vbNullString
    If Not GUID = vbNullString Then
       For BitModeFlag = LBound(BitModeFlags()) To UBound(BitModeFlags())
-         AccessMode NewIs64Bit:=CBool(BitModeFlags(BitModeFlag))
-         
-         For GUIDType = LBound(GUIDTypes()) To UBound(GUIDTypes())
-            Result = Result & CheckHKEYCLASSESROOT(GUID, CStr(GUIDTypes(GUIDType)), "HKCR")
-         Next GUIDType
+         For HiveKey = LBound(HiveKeys()) To UBound(HiveKeys())
+            AccessMode NewIs64Bit:=CBool(BitModeFlags(BitModeFlag))
+            
+            For GUIDType = LBound(GUIDTypes()) To UBound(GUIDTypes())
+               Select Case CStr(HiveKeys(HiveKey))
+                  Case "HKCR"
+                     Result = Result & CheckHKEYCLASSESROOT(GUID, CStr(GUIDTypes(GUIDType)), CStr(HiveKeys(HiveKey)))
+                  Case "HKCU"
+                     Result = Result & CheckHKEYCURRENTUSER(GUID, CStr(GUIDTypes(GUIDType)), CStr(HiveKeys(HiveKey)))
+               End Select
+            Next GUIDType
+         Next HiveKey
       Next BitModeFlag
       
       If Result = vbNullString Then Result = GUID & " - not found." & vbCrLf
@@ -149,9 +190,11 @@ ErrorTrap:
    HandleError
    Resume EndRoutine
 End Function
+
 'This procedure returns the properties for the specified GUID of the specified type.
 Private Function GetGUIDProperties(KeyH As Long, GUID As String, GUIDType As String, HiveKeyName As String) As String
 On Error GoTo ErrorTrap
+Dim ComponentCategory As String
 Dim GUIDKeyH As Long
 Dim Paths As String
 Dim Result As String
@@ -171,10 +214,19 @@ Dim ReturnValue As Long
       Result = Result & vbCrLf & "Default = """ & GetRegistryValue(KeyH, GUID, vbNullString) & """" & vbCrLf
 
       Paths = GetPathsFromGUID(GUIDKeyH, GUID)
-      If Paths = vbNullString Then Result = Result & "No paths." & vbCrLf Else Result = Result & Paths
+      If Paths = vbNullString Then
+         Result = Result & "No paths." & vbCrLf
+      Else
+         Result = Result & Paths & vbCrLf
+      End If
       
-      Result = Result & vbCrLf
-      
+      ComponentCategory = GetRegistryValue(KeyH, GUID, "409")
+      If ComponentCategory = vbNullString Then
+         Result = Result & vbCrLf
+      Else
+         Result = Result & "Component category = """ & ComponentCategory & """" & vbCrLf & vbCrLf
+      End If
+            
       RegCloseKey GUIDKeyH
    ElseIf Not ReturnValue = ERROR_FILE_NOT_FOUND Then
       Result = Result & "Error code: " & CStr(ReturnValue) & " - """ & ErrorDescription(ReturnValue) & """" & vbCrLf
@@ -189,8 +241,6 @@ ErrorTrap:
    Resume EndRoutine
 End Function
 
-
-
 'This procedure returns the registry keys contained by the specified key.
 Private Function GetKeys(ParentKeyH As Long) As String()
 On Error GoTo ErrorTrap
@@ -201,13 +251,11 @@ Dim Keys() As String
 Dim Length As Long
 Dim ReturnValue As Long
 
-   Do
+   Do Until ReturnValue = ERROR_NO_MORE_ITEMS Or (Not ReturnValue = ERROR_SUCCESS)
       KeyName = String$(MAX_SHORT_STRING, vbNullChar)
       Length = Len(KeyName)
       ReturnValue = RegEnumKeyExA(ParentKeyH, Index, KeyName, Length, CLng(0), vbNullString, CLng(0), CLng(0))
-      If ReturnValue = ERROR_NO_MORE_ITEMS Or Not ReturnValue = ERROR_SUCCESS Then
-         Exit Do
-      Else
+      If ReturnValue = ERROR_SUCCESS Then
          If SafeArrayGetDim(Keys()) = 0 Then
             ReDim Keys(0 To 0) As String
          Else
@@ -318,9 +366,6 @@ ErrorTrap:
    Resume EndRoutine
 End Function
 
-
-
-
 'This procedure handles any errors that occur.
 Public Sub HandleError()
 Dim Description As String
@@ -333,7 +378,7 @@ Dim ErrorCode As Long
    On Error GoTo ErrorTrap
    Description = Description & vbCr & "Error code: " & CStr(ErrorCode)
    MsgBox Description, vbExclamation
-Exit Sub
+   Exit Sub
 
 EndProgram:
    End
@@ -341,7 +386,6 @@ EndProgram:
 ErrorTrap:
    Resume EndProgram
 End Sub
-
 
 'This procedure checks whether the specified mode indicates 64 bit access and returns the result.
 Private Function Is64BitAccess(Mode As Long) As Boolean
@@ -383,7 +427,6 @@ ErrorTrap:
    Resume EndRoutine
 End Function
 
-
 'This procedure checks whether specified value is a whole number.
 Private Function IsWholeNumber(Value As String) As Boolean
 On Error GoTo ErrorTrap
@@ -396,7 +439,6 @@ ErrorTrap:
    IsWholeNumber = False
    Resume EndRoutine
 End Function
-
 
 'This procedure is started when this program is executed.
 Public Sub Main()
