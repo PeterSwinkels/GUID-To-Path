@@ -26,6 +26,7 @@ Private Declare Function SafeArrayGetDim Lib "Oleaut32.dll" (ByRef saArray() As 
 Private Const MAX_LONG_STRING As Long = &HFFFF&   'Defines the maximum length in bytes allowed for a long string.
 Private Const MAX_SHORT_STRING As Long = &HFF&    'Defines the maximum length in bytes allowed for a short string.
 
+
 'This procedure manages/returns the registry key access mode used.
 Private Function AccessMode(Optional NewIs64Bit As Variant) As Long
 On Error GoTo ErrorTrap
@@ -184,6 +185,31 @@ Dim FormattedGUID As String
    
 EndRoutine:
    FormatGUID = FormattedGUID
+   Exit Function
+   
+ErrorTrap:
+   HandleError
+   Resume EndRoutine
+End Function
+
+'This procedure returns the first GUID in the specified text if present.
+Public Function GetGUIDFromText(Text As String) As String
+On Error GoTo ErrorTrap
+Dim GUID As String
+Dim EndPosition As String
+Dim StartPosition As String
+
+   GUID = vbNullString
+   StartPosition = InStr(Text, "{")
+   If StartPosition > 0 Then
+      EndPosition = InStr(StartPosition + 1, Text, "}")
+      If EndPosition > 0 Then
+         GUID = Mid$(Text, StartPosition, (EndPosition - StartPosition) + 1)
+      End If
+   End If
+
+EndRoutine:
+   GetGUIDFromText = GUID
    Exit Function
    
 ErrorTrap:

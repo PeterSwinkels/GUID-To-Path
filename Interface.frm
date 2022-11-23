@@ -142,14 +142,17 @@ End Sub
 'This procedure gives the command to start searching for the specified GUIDs.
 Private Sub SearchButton_Click()
 On Error GoTo ErrorTrap
-Dim GUID As Variant
+Dim GUID As String
+Dim LineV As Variant
 
    With ResultsBox
       .Text = vbNullString
-      For Each GUID In Split(GUIDListBox.Text, vbCrLf)
+      For Each LineV In Split(GUIDListBox.Text, vbCrLf)
+         GUID = GetGUIDFromText(CStr(LineV))
+         If GUID = vbNullString Then GUID = LineV
          .Text = .Text & FindGUID(FormatGUID(CStr(GUID)))
          DoEvents
-      Next GUID
+      Next LineV
    End With
 EndRoutine:
    Exit Sub
