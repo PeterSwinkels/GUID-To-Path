@@ -10,6 +10,7 @@ Private Const FORMAT_MESSAGE_FROM_SYSTEM As Long = &H1000&
 Private Const FORMAT_MESSAGE_IGNORE_INSERTS As Long = &H200&
 Private Const HKEY_CLASSES_ROOT As Long = &H80000000
 Private Const HKEY_CURRENT_USER As Long = &H80000001
+Private Const HKEY_LOCAL_MACHINE As Long = &H80000002
 Private Const KEY_READ As Long = &H20019
 Private Const KEY_WOW64_64KEY As Long = &H100&
 Private Const MAX_REG_VALUE_DATA As Long = &HFFFFF
@@ -25,6 +26,7 @@ Private Declare Function SafeArrayGetDim Lib "Oleaut32.dll" (ByRef saArray() As 
 'The constants used by this program.
 Private Const MAX_LONG_STRING As Long = &HFFFF&   'Defines the maximum length in bytes allowed for a long string.
 Private Const MAX_SHORT_STRING As Long = &HFF&    'Defines the maximum length in bytes allowed for a short string.
+Private Const NO_KEY As Long = 0&                 'Defines a null registry key.
 
 
 'This procedure manages/returns the registry key access mode used.
@@ -47,54 +49,20 @@ ErrorTrap:
    Resume EndRoutine
 End Function
 
-'This procedure checks the HKEY_CLASSES_ROOT key for the specified GUID of the specified type and returns the result.
-Private Function CheckHKEYCLASSESROOT(GUID As String, GUIDType As String, HiveKeyName As String) As String
+'This procedure checks the key at the specified path for the specified GUID of the specified type and returns the result.
+Private Function CheckKeyPath(HiveH As Long, KeyPath As String, GUID As String, GUIDType As String, HiveKeyName As String) As String
 On Error GoTo ErrorTrap
-Dim KeyH As Long
-Dim Result As String
-Dim ReturnValue As Long
-
-   ReturnValue = RegOpenKeyExA(HKEY_CLASSES_ROOT, GUIDType, CLng(0), AccessMode(), KeyH)
-   
-   If ReturnValue = ERROR_SUCCESS Then
-      Result = Result & GetGUIDProperties(KeyH, GUID, GUIDType, HiveKeyName)
-      RegCloseKey KeyH
-   End If
-   
-EndRoutine:
-   CheckHKEYCLASSESROOT = Result
-   Exit Function
-   
-ErrorTrap:
-   HandleError
-   Resume EndRoutine
-End Function
-
-'This procedure checks the HKEY_CURRENT_USER\SOFTWARE\Classes key for the specified GUID of the specified type and returns the result.
-Private Function CheckHKEYCURRENTUSER(GUID As String, GUIDType As String, HiveKeyName As String) As String
-On Error GoTo ErrorTrap
-Dim ClassesKeyH As Long
 Dim GUIDTypeKeyH As Long
 Dim Result As String
-Dim ReturnValue As Long
-Dim SoftwareKeyH As Long
-
-   ReturnValue = RegOpenKeyExA(HKEY_CURRENT_USER, "SOFTWARE", CLng(0), AccessMode(), SoftwareKeyH)
-   If ReturnValue = ERROR_SUCCESS Then
-      ReturnValue = RegOpenKeyExA(SoftwareKeyH, "Classes", CLng(0), AccessMode(), ClassesKeyH)
-      If ReturnValue = ERROR_SUCCESS Then
-         ReturnValue = RegOpenKeyExA(ClassesKeyH, GUIDType, CLng(0), AccessMode(), GUIDTypeKeyH)
-         If ReturnValue = ERROR_SUCCESS Then
-            Result = Result & GetGUIDProperties(GUIDTypeKeyH, GUID, GUIDType, HiveKeyName)
-            RegCloseKey GUIDTypeKeyH
-         End If
-         RegCloseKey ClassesKeyH
-      End If
-      RegCloseKey SoftwareKeyH
+   
+   GUIDTypeKeyH = OpenKeyPath(HiveH, KeyPath)
+   If Not GUIDTypeKeyH = NO_KEY Then
+      Result = Result & GetGUIDProperties(GUIDTypeKeyH, GUID, GUIDType, HiveKeyName)
+      RegCloseKey GUIDTypeKeyH
    End If
    
 EndRoutine:
-   CheckHKEYCURRENTUSER = Result
+   CheckKeyPath = Result
    Exit Function
    
 ErrorTrap:
@@ -140,7 +108,7 @@ Dim ReturnValue As Long
 
    BitModeFlags = Array(False, True)
    GUIDTypes = Array("AppID", "CLSID", "Component Categories", "Interface", "TypeLib")
-   HiveKeys = Array("HKCR", "HKCU")
+   HiveKeys = Array("HKCR", "HKCU", "HKLM")
    Result = vbNullString
    If Not GUID = vbNullString Then
       For BitModeFlag = LBound(BitModeFlags()) To UBound(BitModeFlags())
@@ -150,11 +118,17 @@ Dim ReturnValue As Long
             For GUIDType = LBound(GUIDTypes()) To UBound(GUIDTypes())
                Select Case CStr(HiveKeys(HiveKey))
                   Case "HKCR"
-                     Result = Result & CheckHKEYCLASSESROOT(GUID, CStr(GUIDTypes(GUIDType)), CStr(HiveKeys(HiveKey)))
+                     Result = Result & CheckKeyPath(HKEY_CLASSES_ROOT, CStr(GUIDTypes(GUIDType)), GUID, CStr(GUIDTypes(GUIDType)), CStr(HiveKeys(HiveKey)))
                   Case "HKCU"
-                     Result = Result & CheckHKEYCURRENTUSER(GUID, CStr(GUIDTypes(GUIDType)), CStr(HiveKeys(HiveKey)))
+                     Result = Result & CheckKeyPath(HKEY_CURRENT_USER, "SOFTWARE\Classes\" & CStr(GUIDTypes(GUIDType)), GUID, CStr(GUIDTypes(GUIDType)), CStr(HiveKeys(HiveKey)))
                End Select
             Next GUIDType
+            
+            Select Case CStr(HiveKeys(HiveKey))
+               Case "HKLM"
+                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions", GUID, vbNullString, "HKLM")
+            End Select
+            
          Next HiveKey
       Next BitModeFlag
       
@@ -221,37 +195,45 @@ End Function
 Private Function GetGUIDProperties(KeyH As Long, GUID As String, GUIDType As String, HiveKeyName As String) As String
 On Error GoTo ErrorTrap
 Dim ComponentCategory As String
+Dim DefaultV As String
 Dim GUIDKeyH As Long
+Dim NameV As String
 Dim Paths As String
 Dim Result As String
 Dim ReturnValue As Long
 
    ReturnValue = RegOpenKeyExA(KeyH, GUID, CLng(0), AccessMode(), GUIDKeyH)
-     
    If ReturnValue = ERROR_SUCCESS Then
       Result = Result & GUID & " (" & HiveKeyName & ") (" & GUIDType & ") "
       
       If Is64BitAccess(AccessMode()) Then
-         Result = Result & "(64 bit)"
+         Result = Result & "(64 bit)" & vbCrLf
       Else
-         Result = Result & "(32 bit)"
+         Result = Result & "(32 bit)" & vbCrLf
       End If
 
-      Result = Result & vbCrLf & "Default = """ & GetRegistryValue(KeyH, GUID, vbNullString) & """" & vbCrLf
+      DefaultV = GetRegistryValue(KeyH, GUID, vbNullString)
+      If Not DefaultV = vbNullString Then
+         Result = Result & "Default = """ & DefaultV & """" & vbCrLf
+      End If
 
       Paths = GetPathsFromGUID(GUIDKeyH, GUID)
       If Paths = vbNullString Then
-         Result = Result & "No paths." & vbCrLf
+         Result = Result & "No handler/server paths." & vbCrLf
       Else
          Result = Result & Paths & vbCrLf
       End If
       
       ComponentCategory = GetRegistryValue(KeyH, GUID, "409")
-      If ComponentCategory = vbNullString Then
-         Result = Result & vbCrLf
-      Else
-         Result = Result & "Component category = """ & ComponentCategory & """" & vbCrLf & vbCrLf
+      If Not ComponentCategory = vbNullString Then
+         Result = Result & "Component category = """ & ComponentCategory & """" & vbCrLf
       End If
+
+      NameV = GetRegistryValue(KeyH, GUID, "Name")
+      If Not NameV = vbNullString Then
+         Result = Result & "Name = """ & NameV & """" & vbCrLf
+      End If
+      Result = Result & vbCrLf
             
       RegCloseKey GUIDKeyH
    ElseIf Not ReturnValue = ERROR_FILE_NOT_FOUND Then
@@ -480,5 +462,45 @@ ErrorTrap:
    HandleError
    Resume EndRoutine
 End Sub
+
+
+'This procedure returns the handle for the last key in the specified path.
+Private Function OpenKeyPath(HiveH As Long, KeyPath As String) As Long
+On Error GoTo ErrorTrap
+Dim KeyH As Long
+Dim KeyNames As Variant
+Dim Index As Long
+Dim SubKeyH As Long
+Dim ResultKeyH As Long
+Dim ReturnValue As Long
+   
+   ResultKeyH = NO_KEY
+   KeyNames = Split(KeyPath, "\")
+   Index = LBound(KeyNames, 1)
+   ReturnValue = RegOpenKeyExA(HiveH, CStr(KeyNames(Index)), CLng(0), AccessMode(), KeyH)
+   If ReturnValue = ERROR_SUCCESS Then
+      Do
+         Index = Index + 1
+         
+         If Index > UBound(KeyNames, 1) Then
+            ResultKeyH = KeyH
+         Else
+            ReturnValue = RegOpenKeyExA(KeyH, CStr(KeyNames(Index)), CLng(0), AccessMode(), SubKeyH)
+            If ReturnValue = ERROR_SUCCESS Then
+               If Index < UBound(KeyNames, 1) Then RegCloseKey KeyH
+               KeyH = SubKeyH
+            End If
+         End If
+      Loop Until Index > UBound(KeyNames, 1) Or Not ReturnValue = ERROR_SUCCESS
+   End If
+
+EndRoutine:
+   OpenKeyPath = ResultKeyH
+   Exit Function
+   
+ErrorTrap:
+   HandleError
+   Resume EndRoutine
+End Function
 
 
