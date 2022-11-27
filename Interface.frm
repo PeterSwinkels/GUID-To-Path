@@ -145,16 +145,18 @@ On Error GoTo ErrorTrap
 Dim GUID As String
 Dim LineV As Variant
 
+   Screen.MousePointer = vbHourglass
    With ResultsBox
       .Text = vbNullString
       For Each LineV In Split(GUIDListBox.Text, vbCrLf)
          GUID = GetGUIDFromText(CStr(LineV))
          If GUID = vbNullString Then GUID = LineV
          .Text = .Text & FindGUID(FormatGUID(CStr(GUID)))
-         DoEvents
+         If DoEvents() = 0 Then Exit For
       Next LineV
    End With
 EndRoutine:
+   Screen.MousePointer = vbDefault
    Exit Sub
    
 ErrorTrap:

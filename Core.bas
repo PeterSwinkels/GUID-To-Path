@@ -260,6 +260,7 @@ Dim Keys() As String
 Dim Length As Long
 Dim ReturnValue As Long
 
+   Index = 0
    Do Until ReturnValue = ERROR_NO_MORE_ITEMS Or (Not ReturnValue = ERROR_SUCCESS)
       KeyName = String$(MAX_SHORT_STRING, vbNullChar)
       Length = Len(KeyName)
@@ -318,17 +319,19 @@ Dim Value As String
             ReturnValue = RegOpenKeyExA(GUIDKeyH, CStr(Key), CLng(0), AccessMode(), KeyH)
             If ReturnValue = ERROR_SUCCESS Then
                SubKeys = GetKeys(KeyH)
-               For Each SubKey In SubKeys
-                  If IsWholeNumber(CStr(SubKey)) Then
-                     ReturnValue = RegOpenKeyExA(KeyH, CStr(SubKey), CLng(0), AccessMode(), SubKeyH)
-                     If ReturnValue = ERROR_SUCCESS Then
-                        For Each KeyName In Array("Win32", "Win64")
-                           Value = GetRegistryValue(SubKeyH, CStr(KeyName), vbNullString)
-                           If Not Value = vbNullString Then Result = Result & KeyName & " = """ & Value & """" & vbCrLf
-                        Next KeyName
+               If Not SafeArrayGetDim(SubKeys()) = 0 Then
+                  For Each SubKey In SubKeys
+                     If IsWholeNumber(CStr(SubKey)) Then
+                        ReturnValue = RegOpenKeyExA(KeyH, CStr(SubKey), CLng(0), AccessMode(), SubKeyH)
+                        If ReturnValue = ERROR_SUCCESS Then
+                           For Each KeyName In Array("Win32", "Win64")
+                              Value = GetRegistryValue(SubKeyH, CStr(KeyName), vbNullString)
+                              If Not Value = vbNullString Then Result = Result & KeyName & " = """ & Value & """" & vbCrLf
+                           Next KeyName
+                        End If
                      End If
-                  End If
-               Next SubKey
+                  Next SubKey
+               End If
                RegCloseKey KeyH
             End If
          End If
@@ -386,7 +389,9 @@ Dim ErrorCode As Long
    
    On Error GoTo ErrorTrap
    Description = Description & vbCr & "Error code: " & CStr(ErrorCode)
-   MsgBox Description, vbExclamation
+   If MsgBox(Description, vbOKCancel Or vbDefaultButton1 Or vbExclamation) = vbCancel Then
+      Resume EndProgram
+   End If
    Exit Sub
 
 EndProgram:
