@@ -148,6 +148,7 @@ End Function
 
 'This procedure formats the specified GUID and returns the result.
 Public Function FormatGUID(GUID As String)
+On Error GoTo ErrorTrap
 Dim FormattedGUID As String
 
    FormattedGUID = UCase$(Trim$(GUID))
