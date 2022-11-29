@@ -52,13 +52,13 @@ End Function
 'This procedure checks the key at the specified path for the specified GUID of the specified type and returns the result.
 Private Function CheckKeyPath(HiveH As Long, KeyPath As String, GUID As String, GUIDType As String, HiveKeyName As String) As String
 On Error GoTo ErrorTrap
-Dim GUIDTypeKeyH As Long
+Dim GUIDParentKeyH As Long
 Dim Result As String
    
-   GUIDTypeKeyH = OpenKeyPath(HiveH, KeyPath)
-   If Not GUIDTypeKeyH = NO_KEY Then
-      Result = Result & GetGUIDProperties(GUIDTypeKeyH, GUID, GUIDType, HiveKeyName)
-      RegCloseKey GUIDTypeKeyH
+   GUIDParentKeyH = OpenKeyPath(HiveH, KeyPath)
+   If Not GUIDParentKeyH = NO_KEY Then
+      Result = Result & GetGUIDProperties(GUIDParentKeyH, GUID, GUIDType, HiveKeyName)
+      RegCloseKey GUIDParentKeyH
    End If
    
 EndRoutine:
@@ -326,8 +326,11 @@ Dim Value As String
                         If ReturnValue = ERROR_SUCCESS Then
                            For Each KeyName In Array("Win32", "Win64")
                               Value = GetRegistryValue(SubKeyH, CStr(KeyName), vbNullString)
-                              If Not Value = vbNullString Then Result = Result & KeyName & " = """ & Value & """" & vbCrLf
+                              If Not Value = vbNullString Then
+                                 Result = Result & KeyName & " = """ & Value & """" & vbCrLf
+                              End If
                            Next KeyName
+                           RegCloseKey SubKeyH
                         End If
                      End If
                   Next SubKey
@@ -361,12 +364,13 @@ Dim ValueData As String
       Length = Len(ValueData)
       ReturnValue = RegQueryValueExA(KeyH, ValueName, CLng(0), REG_SZ, ValueData, Length)
 
-      If ReturnValue = ERROR_SUCCESS Then
-         If Length > 0 Then ValueData = Left$(ValueData, Length - 1)
-         RegCloseKey KeyH
+      If ReturnValue = ERROR_SUCCESS And Length > 0 Then
+         ValueData = Left$(ValueData, Length - 1)
       Else
          ValueData = vbNullString
       End If
+   
+      RegCloseKey KeyH
    End If
    
 EndRoutine:
@@ -493,7 +497,7 @@ Dim ReturnValue As Long
          Else
             ReturnValue = RegOpenKeyExA(KeyH, CStr(KeyNames(Index)), CLng(0), AccessMode(), SubKeyH)
             If ReturnValue = ERROR_SUCCESS Then
-               If Index < UBound(KeyNames, 1) Then RegCloseKey KeyH
+               If Index <= UBound(KeyNames, 1) Then RegCloseKey KeyH
                KeyH = SubKeyH
             End If
          End If
