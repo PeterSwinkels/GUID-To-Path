@@ -480,29 +480,26 @@ On Error GoTo ErrorTrap
 Dim KeyH As Long
 Dim KeyNames As Variant
 Dim Index As Long
-Dim SubKeyH As Long
 Dim ResultKeyH As Long
 Dim ReturnValue As Long
-   
-   ResultKeyH = NO_KEY
+Dim SubKeyH As Long
+
+   KeyH = HiveH
    KeyNames = Split(KeyPath, "\")
    Index = LBound(KeyNames, 1)
-   ReturnValue = RegOpenKeyExA(HiveH, CStr(KeyNames(Index)), CLng(0), AccessMode(), KeyH)
-   If ReturnValue = ERROR_SUCCESS Then
-      Do
-         Index = Index + 1
-         
-         If Index > UBound(KeyNames, 1) Then
-            ResultKeyH = KeyH
+   ResultKeyH = NO_KEY
+   Do
+      ReturnValue = RegOpenKeyExA(KeyH, CStr(KeyNames(Index)), CLng(0), AccessMode(), SubKeyH)
+      If ReturnValue = ERROR_SUCCESS Then
+         If Index = UBound(KeyNames, 1) Then
+            ResultKeyH = SubKeyH
          Else
-            ReturnValue = RegOpenKeyExA(KeyH, CStr(KeyNames(Index)), CLng(0), AccessMode(), SubKeyH)
-            If ReturnValue = ERROR_SUCCESS Then
-               If Index <= UBound(KeyNames, 1) Then RegCloseKey KeyH
-               KeyH = SubKeyH
-            End If
+            RegCloseKey SubKeyH
+            KeyH = SubKeyH
+            Index = Index + 1
          End If
-      Loop Until Index > UBound(KeyNames, 1) Or Not ReturnValue = ERROR_SUCCESS
-   End If
+      End If
+   Loop While ResultKeyH = NO_KEY And ReturnValue = ERROR_SUCCESS
 
 EndRoutine:
    OpenKeyPath = ResultKeyH
