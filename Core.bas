@@ -147,7 +147,7 @@ ErrorTrap:
 End Function
 
 'This procedure formats the specified GUID and returns the result.
-Public Function FormatGUID(GUID As String)
+Public Function FormatGUID(GUID As String) As String
 On Error GoTo ErrorTrap
 Dim FormattedGUID As String
 
