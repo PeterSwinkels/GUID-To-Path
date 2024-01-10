@@ -127,6 +127,8 @@ Dim ReturnValue As Long
             Select Case CStr(HiveKeys(HiveKey))
                Case "HKLM"
                   Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions", GUID, vbNullString, "HKLM")
+                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderTypes", GUID, vbNullString, "HKLM")
+                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SYSTEM\CurrentControlSet\Control\Class", GUID, vbNullString, "HKLM")
             End Select
             
          Next HiveKey
@@ -195,10 +197,7 @@ End Function
 'This procedure returns the properties for the specified GUID of the specified type.
 Private Function GetGUIDProperties(KeyH As Long, GUID As String, GUIDType As String, HiveKeyName As String) As String
 On Error GoTo ErrorTrap
-Dim ComponentCategory As String
-Dim DefaultV As String
 Dim GUIDKeyH As Long
-Dim NameV As String
 Dim Paths As String
 Dim Result As String
 Dim ReturnValue As Long
@@ -212,12 +211,7 @@ Dim ReturnValue As Long
       Else
          Result = Result & "(32 bit)" & vbCrLf
       End If
-
-      DefaultV = GetRegistryValue(KeyH, GUID, vbNullString)
-      If Not DefaultV = vbNullString Then
-         Result = Result & "Default = """ & DefaultV & """" & vbCrLf
-      End If
-
+      
       Paths = GetPathsFromGUID(GUIDKeyH, GUID)
       If Paths = vbNullString Then
          Result = Result & "No handler/server paths." & vbCrLf
@@ -225,17 +219,12 @@ Dim ReturnValue As Long
          Result = Result & Paths & vbCrLf
       End If
       
-      ComponentCategory = GetRegistryValue(KeyH, GUID, "409")
-      If Not ComponentCategory = vbNullString Then
-         Result = Result & "Component category = """ & ComponentCategory & """" & vbCrLf
-      End If
-
-      NameV = GetRegistryValue(KeyH, GUID, "Name")
-      If Not NameV = vbNullString Then
-         Result = Result & "Name = """ & NameV & """" & vbCrLf
-      End If
+      Result = Result & GetRegistryValueAsText(KeyH, GUID, "CanonicalName", "Canonical name")
+      Result = Result & GetRegistryValueAsText(KeyH, GUID, vbNullString, "Default")
+      Result = Result & GetRegistryValueAsText(KeyH, GUID, "Class", "Class")
+      Result = Result & GetRegistryValueAsText(KeyH, GUID, "Name", "Name")
       Result = Result & vbCrLf
-            
+      
       RegCloseKey GUIDKeyH
    ElseIf Not ReturnValue = ERROR_FILE_NOT_FOUND Then
       Result = Result & "Error code: " & CStr(ReturnValue) & " - """ & ErrorDescription(ReturnValue) & """" & vbCrLf
@@ -381,6 +370,27 @@ ErrorTrap:
    HandleError
    Resume EndRoutine
 End Function
+
+'This procedure attempts to retrieve the specified registry value and returns it formatted as text if found.
+Private Function GetRegistryValueAsText(KeyH As Long, GUID As String, ValueName As String, Description As String) As String
+On Error GoTo ErrorTrap
+Dim Result As String
+Dim Value As String
+
+   Value = GetRegistryValue(KeyH, GUID, ValueName)
+   If Not Value = vbNullString Then
+      Result = Description & " = """ & Value & """" & vbCrLf
+   End If
+   
+EndRoutine:
+   GetRegistryValueAsText = Result
+   Exit Function
+   
+ErrorTrap:
+   HandleError
+   Resume EndRoutine
+End Function
+
 
 'This procedure handles any errors that occur.
 Public Sub HandleError()
