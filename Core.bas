@@ -494,7 +494,7 @@ Dim SubKeyH As Long
          If Index = UBound(KeyNames, 1) Then
             ResultKeyH = SubKeyH
          Else
-            RegCloseKey SubKeyH
+            RegCloseKey KeyH
             KeyH = SubKeyH
             Index = Index + 1
          End If
