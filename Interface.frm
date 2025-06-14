@@ -25,7 +25,7 @@ Begin VB.Form InterfaceWindow
       Locked          =   -1  'True
       MultiLine       =   -1  'True
       ScrollBars      =   3  'Both
-      TabIndex        =   3
+      TabIndex        =   2
       ToolTipText     =   "Displays information regarding the specified GUIDs after a search."
       Top             =   3000
       Width           =   5895
@@ -43,7 +43,7 @@ Begin VB.Form InterfaceWindow
       EndProperty
       Height          =   372
       Left            =   5040
-      TabIndex        =   2
+      TabIndex        =   1
       Top             =   2520
       Width           =   972
    End
@@ -96,7 +96,7 @@ Begin VB.Form InterfaceWindow
       EndProperty
       Height          =   252
       Left            =   120
-      TabIndex        =   1
+      TabIndex        =   3
       Top             =   120
       Width           =   612
    End
