@@ -1,2 +1,2 @@
 # GUID-To-Path
-This program allows the user to specify GUIDs which the program looks for in specific registry keys in order to retrieve information about which files are being referred to by the GUIDs specified.
+This program lets the user specify one or more GUIDs, then searches the registry in specific locations to find out which files or components they refer to. Note: The way the program sees the registry depends on the compatibility mode it’s running in — this may affect what it finds.
