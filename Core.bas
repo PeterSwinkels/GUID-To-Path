@@ -220,8 +220,8 @@ Dim ReturnValue As Long
       End If
       
       Result = Result & GetRegistryValueAsText(KeyH, GUID, "CanonicalName", "Canonical name")
-      Result = Result & GetRegistryValueAsText(KeyH, GUID, vbNullString, "Default")
       Result = Result & GetRegistryValueAsText(KeyH, GUID, "Class", "Class")
+      Result = Result & GetRegistryValueAsText(KeyH, GUID, vbNullString, "Default")
       Result = Result & GetRegistryValueAsText(KeyH, GUID, "Name", "Name")
       Result = Result & vbCrLf
       
