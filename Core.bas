@@ -50,14 +50,14 @@ ErrorTrap:
 End Function
 
 'This procedure checks the key at the specified path for the specified GUID of the specified type and returns the result.
-Private Function CheckKeyPath(HiveH As Long, KeyPath As String, GUID As String, GUIDType As String, HiveKeyName As String) As String
+Private Function CheckKeyPath(HiveH As Long, KeyPath As String, GUID As String, GUIDType As String, SubKey As String, HiveKeyName As String) As String
 On Error GoTo ErrorTrap
 Dim GUIDParentKeyH As Long
 Dim Result As String
    
    GUIDParentKeyH = OpenKeyPath(HiveH, KeyPath)
    If Not GUIDParentKeyH = NO_KEY Then
-      Result = Result & GetGUIDProperties(GUIDParentKeyH, GUID, GUIDType, HiveKeyName)
+      Result = Result & GetGUIDProperties(GUIDParentKeyH, GUID, GUIDType, SubKey, HiveKeyName)
       RegCloseKey GUIDParentKeyH
    End If
    
@@ -105,6 +105,8 @@ Dim HiveKeys() As Variant
 Dim KeyH As Long
 Dim Result As String
 Dim ReturnValue As Long
+Dim SubKey As Variant
+Dim SubKeys() As String
 
    BitModeFlags = Array(False, True)
    GUIDTypes = Array("AppID", "CLSID", "Component Categories", "Interface", "TypeLib")
@@ -118,17 +120,30 @@ Dim ReturnValue As Long
             For GUIDType = LBound(GUIDTypes()) To UBound(GUIDTypes())
                Select Case CStr(HiveKeys(HiveKey))
                   Case "HKCR"
-                     Result = Result & CheckKeyPath(HKEY_CLASSES_ROOT, CStr(GUIDTypes(GUIDType)), GUID, CStr(GUIDTypes(GUIDType)), CStr(HiveKeys(HiveKey)))
+                     Result = Result & CheckKeyPath(HKEY_CLASSES_ROOT, CStr(GUIDTypes(GUIDType)), GUID, CStr(GUIDTypes(GUIDType)), GUID, CStr(HiveKeys(HiveKey)))
                   Case "HKCU"
-                     Result = Result & CheckKeyPath(HKEY_CURRENT_USER, "SOFTWARE\Classes\" & CStr(GUIDTypes(GUIDType)), GUID, CStr(GUIDTypes(GUIDType)), CStr(HiveKeys(HiveKey)))
+                     Result = Result & CheckKeyPath(HKEY_CURRENT_USER, "SOFTWARE\Classes\" & CStr(GUIDTypes(GUIDType)), GUID, CStr(GUIDTypes(GUIDType)), GUID, CStr(HiveKeys(HiveKey)))
                End Select
             Next GUIDType
             
             Select Case CStr(HiveKeys(HiveKey))
                Case "HKLM"
-                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions", GUID, vbNullString, "HKLM")
-                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderTypes", GUID, vbNullString, "HKLM")
-                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SYSTEM\CurrentControlSet\Control\Class", GUID, vbNullString, "HKLM")
+                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions", GUID, vbNullString, GUID, "HKLM")
+                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderTypes", GUID, vbNullString, GUID, "HKLM")
+                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions", GUID, "Approved Shell Extension", "Approved", "HKLM")
+                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions", GUID, "Blocked Shell Extension", "Blocked", "HKLM")
+                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks", GUID, "Task", GUID, "HKLM")
+                  Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SYSTEM\CurrentControlSet\Control\Class", GUID, vbNullString, GUID, "HKLM")
+
+                  KeyH = OpenKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
+                  SubKeys = GetKeys(KeyH)
+                  RegCloseKey (KeyH)
+
+                  For Each SubKey In SubKeys
+                     If Left$(UCase$(SubKey), Len(GUID)) = UCase$(GUID) Then
+                        Result = Result & CheckKeyPath(HKEY_LOCAL_MACHINE, "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", CStr(SubKey), "Uninstaller", CStr(SubKey), "HKLM")
+                     End If
+                  Next SubKey
             End Select
             
          Next HiveKey
@@ -195,41 +210,57 @@ ErrorTrap:
 End Function
 
 'This procedure returns the properties for the specified GUID of the specified type.
-Private Function GetGUIDProperties(KeyH As Long, GUID As String, GUIDType As String, HiveKeyName As String) As String
+Private Function GetGUIDProperties(KeyH As Long, GUID As String, GUIDType As String, SubKey As String, HiveKeyName As String) As String
 On Error GoTo ErrorTrap
+Dim GUIDIsKey As Boolean
 Dim GUIDKeyH As Long
+Dim GUIDValueData As String
 Dim Paths As String
 Dim Result As String
 Dim ReturnValue As Long
 
-   ReturnValue = RegOpenKeyExA(KeyH, GUID, CLng(0), AccessMode(), GUIDKeyH)
-   If ReturnValue = ERROR_SUCCESS Then
-      Result = Result & GUID & " (" & HiveKeyName & ") (" & GUIDType & ") "
-      
-      If Is64BitAccess(AccessMode()) Then
-         Result = Result & "(64 bit)" & vbCrLf
-      Else
-         Result = Result & "(32 bit)" & vbCrLf
-      End If
-      
-      Paths = GetPathsFromGUID(GUIDKeyH, GUID)
-      If Paths = vbNullString Then
-         Result = Result & "No handler/server paths." & vbCrLf
-      Else
-         Result = Result & Paths & vbCrLf
-      End If
-      
-      Result = Result & GetRegistryValueAsText(KeyH, GUID, "CanonicalName", "Canonical name")
-      Result = Result & GetRegistryValueAsText(KeyH, GUID, "Class", "Class")
-      Result = Result & GetRegistryValueAsText(KeyH, GUID, vbNullString, "Default")
-      Result = Result & GetRegistryValueAsText(KeyH, GUID, "Name", "Name")
-      Result = Result & vbCrLf
-      
-      RegCloseKey GUIDKeyH
-   ElseIf Not ReturnValue = ERROR_FILE_NOT_FOUND Then
-      Result = Result & "Error code: " & CStr(ReturnValue) & " - """ & ErrorDescription(ReturnValue) & """" & vbCrLf
+   GUIDIsKey = (UCase$(SubKey) = UCase$(GUID))
+   If GUIDIsKey Then
+      GUIDValueData = vbNullString
+   Else
+      GUIDValueData = GetRegistryValueAsText(KeyH, SubKey, GUID, "Description")
    End If
-   
+
+   If GUIDIsKey Or ((Not GUIDIsKey) And (Not GUIDValueData = vbNullString)) Then
+      ReturnValue = RegOpenKeyExA(KeyH, SubKey, CLng(0), AccessMode(), GUIDKeyH)
+      If ReturnValue = ERROR_SUCCESS Then
+         Result = Result & GUID & " (" & HiveKeyName & ") (" & GUIDType & ") "
+         
+         If Is64BitAccess(AccessMode()) Then
+            Result = Result & "(64 bit)" & vbCrLf
+         Else
+            Result = Result & "(32 bit)" & vbCrLf
+         End If
+         
+         Paths = GetPathsFromGUID(GUIDKeyH, GUID)
+         If Paths = vbNullString Then
+            Result = Result & "No handler/server paths." & vbCrLf
+         Else
+            Result = Result & Paths & vbCrLf
+         End If
+      
+         Result = Result & GetRegistryValueAsText(KeyH, GUID, "CanonicalName", "Canonical name")
+         Result = Result & GetRegistryValueAsText(KeyH, GUID, "Class", "Class")
+         Result = Result & GetRegistryValueAsText(KeyH, SubKey, "Description", "Description")
+         Result = Result & GetRegistryValueAsText(KeyH, SubKey, "DisplayName", "Display name")
+         Result = Result & GetRegistryValueAsText(KeyH, GUID, vbNullString, "Default")
+         Result = Result & GetRegistryValueAsText(KeyH, GUID, "Name", "Name")
+         Result = Result & GetRegistryValueAsText(KeyH, SubKey, "Path", "Path")
+         Result = Result & GetRegistryValueAsText(KeyH, SubKey, "Uninstallstring", "Uninstall string")
+         If (Not GUIDIsKey) And (Not GUIDValueData = vbNullString) Then Result = Result & GUIDValueData
+         Result = Result & vbCrLf
+         
+         RegCloseKey GUIDKeyH
+      ElseIf Not ReturnValue = ERROR_FILE_NOT_FOUND Then
+         Result = Result & "Error code: " & CStr(ReturnValue) & " - """ & ErrorDescription(ReturnValue) & """" & vbCrLf
+      End If
+   End If
+
 EndRoutine:
    GetGUIDProperties = Result
    Exit Function
@@ -372,12 +403,12 @@ ErrorTrap:
 End Function
 
 'This procedure attempts to retrieve the specified registry value and returns it formatted as text if found.
-Private Function GetRegistryValueAsText(KeyH As Long, GUID As String, ValueName As String, Description As String) As String
+Private Function GetRegistryValueAsText(KeyH As Long, SubKey As String, ValueName As String, Description As String) As String
 On Error GoTo ErrorTrap
 Dim Result As String
 Dim Value As String
 
-   Value = GetRegistryValue(KeyH, GUID, ValueName)
+   Value = GetRegistryValue(KeyH, SubKey, ValueName)
    If Not Value = vbNullString Then
       Result = Description & " = """ & Value & """" & vbCrLf
    End If
