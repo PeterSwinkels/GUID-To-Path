@@ -129,8 +129,9 @@ On Error Resume Next
    GUIDListBox.Width = Me.ScaleWidth - 2
    GUIDListBox.Height = (Me.ScaleHeight / 2) - 2.5
    
-   ResultsBox.Width = Me.ScaleWidth - 2
-   ResultsBox.Height = (Me.ScaleHeight / 2) - 2.5
+   ResultsBox.Width = GUIDListBox.Width
+   ResultsBox.Height = GUIDListBox.Height
+
    ResultsBox.Top = GUIDListBox.Top + GUIDListBox.Height + 2.5
    
    ResultsLabel.Top = GUIDListBox.Top + GUIDListBox.Height + 1
